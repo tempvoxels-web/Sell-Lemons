@@ -1,5 +1,3 @@
--- made by V O X E L S . R B X. 
-
 if not game:IsLoaded() then game.Loaded:Wait() end
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
@@ -323,12 +321,15 @@ task.spawn(function() -- auto buy buttons loop
             if not ScriptData.AutoBuy or Resolving then IsBusy = false; return end
 
             if ScriptData.MainSettings.ButtonBuy.UseForeverPurchase then
+                if not ScriptData.AutoBuy or Resolving then IsBusy = false; return end
                 local Success = pcall(function() Purchase:InvokeServer(true) end)
 
                 if not Success then
+                    if not ScriptData.AutoBuy or Resolving then IsBusy = false; return end
                     pcall(function() Purchase:InvokeServer() end)
                 end
             else
+                if not ScriptData.AutoBuy or Resolving then IsBusy = false; return end
                 pcall(function() Purchase:InvokeServer() end)
             end
 
