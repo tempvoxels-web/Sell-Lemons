@@ -93,6 +93,8 @@ local ScriptData = {
         },
 
         Rebirth = {
+            MaximumRebirths = 0, -- maximum allowed rebirths per evolution (0 = off)
+
             MinimumPotential = 1000, -- the minimum potential investors needed to rebirth when auto rebirth is on.
             XFactor = 10, -- the X factor to rebirth at when auto rebirth is on. (current investors * this number = then rebirth)
 
@@ -432,7 +434,6 @@ task.spawn(function() -- auto rebirth loop
     local function DoRebirth()
         pcall(function() 
             ScriptData.Remotes.Rebirth:InvokeServer()
-
             WaitForResolve()
         end)
     end
@@ -448,6 +449,12 @@ task.spawn(function() -- auto rebirth loop
             end
         end
         return false
+    end
+
+    local function GetCurrentRebirths()
+        if not ScriptData.Values then return 0 end
+        local rebirths = ScriptData.Values:GetAttribute("Rebirths")
+        return rebirths or 0
     end
 
     while true do task.wait(0.1)
@@ -467,6 +474,16 @@ task.spawn(function() -- auto rebirth loop
         local Remote = ScriptData.Remotes.Rebirth
         if not Remote then continue end
 
+        -- === MAXIMUM REBIRTHS CHECK (like Evolve) ===
+        local MaxRebirths = ScriptData.MainSettings.Rebirth.MaximumRebirths
+        if MaxRebirths > 0 then
+            local CurrentRebirths = GetCurrentRebirths()
+            if CurrentRebirths >= MaxRebirths then
+                continue -- stop rebirthing once we hit the limit
+            end
+        end
+        -- ===========================================
+
         local Settings = ScriptData.MainSettings.Rebirth
         local ShouldRebirth = false
 
@@ -474,7 +491,7 @@ task.spawn(function() -- auto rebirth loop
             if tick() - LastConflictNotify >= 5 then
                 Rayfield:Notify({
                     Title = "Rebirth Settings Conflict",
-                    Content = "Cannot use 'Rebirth When Unable to Buy' and 'Rebirth After Certain Time' together. Please disable one.",
+                    Content = "Cannot use 'Rebirth When Unable to Buy' and 'Rebirth After Certain Time' together.",
                     Image = "alert-circle",
                     Duration = 5,
                 })
@@ -982,6 +999,35 @@ MainSettingsTab:CreateDivider()
 MainSettingsTab:CreateSection("Rebirth Settings")
 
 MainSettingsTab:CreateInput({
+    Name = "Maximum Amount of Rebirths (per evolve, 0 = off)",
+    CurrentValue = "0",
+    PlaceholderText = "e.g. 10",
+    RemoveTextAfterFocusLost = false,
+    Flag = "MaximumRebirths",
+    Callback = function(Text)
+        local Number = tonumber(Text)
+
+        if Number and Number >= 0 then
+            ScriptData.MainSettings.Rebirth.MaximumRebirths = Number
+
+            Rayfield:Notify({
+                Title = "Maximum Rebirths",
+                Content = "Maximum rebirths set to " .. tostring(Number),
+                Image = "check",
+                Duration = 3,
+            })
+        else
+            Rayfield:Notify({
+                Title = "Maximum Rebirths",
+                Content = "Invalid number entered. Please enter a valid number greater than 0 or equal to 0.",
+                Image = "alert-circle",
+                Duration = 3,
+            })
+        end
+    end,
+})
+
+MainSettingsTab:CreateInput({
     Name = "Minimum Investors Needed (before rebirth)",
     CurrentValue = "1000",
     PlaceholderText = "e.g. 1000",
@@ -995,7 +1041,7 @@ MainSettingsTab:CreateInput({
 
             Rayfield:Notify({
                 Title = "Minimum Investors Needed",
-                Content = "Minimum Investors set to " .. tostring(Number) .. " Investors.",
+                Content = "Minimum Investors set to " .. tostring(Number),
                 Image = "check",
                 Duration = 3,
             })
@@ -1038,6 +1084,8 @@ MainSettingsTab:CreateInput({
         end
     end,
 })
+
+MainSettingsTab:CreateDivider()
 
 MainSettingsTab:CreateInput({
     Name = "Rebirth When Unable to Buy Interval (in seconds)",
