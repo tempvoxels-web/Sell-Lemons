@@ -15,7 +15,7 @@ local Window = Rayfield:CreateWindow({
     ShowText = "",
     Theme = "Amethyst",
 
-    ToggleUIKeybind = RightShift,
+    ToggleUIKeybind = Enum.KeyCode.RightShift,
 
     DisableRayfieldPrompts = true,
     DisableBuildWarnings = true,
@@ -112,6 +112,9 @@ local ScriptData = {
 
     Modules = {
         Tycoon = nil,
+
+        Analyzer = nil,
+        Balance = nil,
 
         Balances = nil,
         Upgrades = nil,
@@ -226,6 +229,8 @@ local S1, R1 = pcall(function()
     ScriptData.Modules.Ascension = require(ReplicatedStorage.Modules.Tycoon.Component.Client.ClientTycoonAscension)
     ScriptData.Modules.PhoneOffers = require(ReplicatedStorage.Modules.Tycoon.Component.Client.ClientTycoonPhoneOffers)
     ScriptData.Modules.TycoonPowers = require(ReplicatedStorage.Modules.Tycoon.Component.Client.ClientTycoonPowers)
+    ScriptData.Modules.Analyzer = require(ReplicatedStorage.Modules.Tycoon.Component.TycoonAnalyzer)
+    ScriptData.Modules.Balance = require(ReplicatedStorage.Balance)
 end)
 
 local S2, R2 = pcall(function()
@@ -300,51 +305,63 @@ task.spawn(function() -- auto buy buttons loop
     local IsBusy = false
 
     local function BuyButtons()
-        if IsBusy or Resolving then return end
-        IsBusy = true
-
-        local Buyable = {}
-
-        for _, v in ipairs(ScriptData.PlayerTycoon.Purchases:GetDescendants()) do
-            if v:IsA("Model") then
-                local Shown = v:GetAttribute("Shown")
-                local Purchased = v:GetAttribute("Purchased")
-
-                if not Purchased and Shown then
-                    local Purchase = v:FindFirstChild("Purchase")
-                    if Purchase and Purchase:IsA("RemoteFunction") then
-                        table.insert(Buyable, Purchase)
-                    end
-                end
-            end
+        if IsBusy or Resolving then
+            return
         end
 
-        for _, Purchase in ipairs(Buyable) do
-            if not ScriptData.AutoBuy or Resolving then IsBusy = false; return end
+        IsBusy = true
 
-            if ScriptData.MainSettings.ButtonBuy.UseForeverPurchase then
-                if not ScriptData.AutoBuy or Resolving then IsBusy = false; return end
-                local Success = pcall(function() Purchase:InvokeServer(true) end)
+        local Analyzer = RequestComp(ScriptData.Modules.Analyzer)
+        if not Analyzer then
+            IsBusy = false
+            return
+        end
 
-                if not Success then
-                    if not ScriptData.AutoBuy or Resolving then IsBusy = false; return end
-                    pcall(function() Purchase:InvokeServer() end)
+        local Purchases = Analyzer:GetPurchases()
+
+        for _, id in ipairs(ScriptData.Modules.Balance.PurchaseOrder) do
+            local Purchase = Purchases[id]
+
+            if Purchase
+                and Purchase:IsEnabled()
+                and not Purchase:IsPurchased() then
+
+                local Remote = Purchase.Instance:FindFirstChild("Purchase", true)
+
+                if Remote and Remote:IsA("RemoteFunction") then
+                    if ScriptData.MainSettings.ButtonBuy.UseForeverPurchase then
+                        local Success = pcall(function()
+                            Remote:InvokeServer(true)
+                        end)
+
+                        if not Success then
+                            pcall(function()
+                                Remote:InvokeServer()
+                            end)
+                        end
+                    else
+                        pcall(function()
+                            Remote:InvokeServer()
+                        end)
+                    end
                 end
-            else
-                if not ScriptData.AutoBuy or Resolving then IsBusy = false; return end
-                pcall(function() Purchase:InvokeServer() end)
-            end
 
-            if type(ScriptData.MainSettings.ButtonBuy.BuyInterval) == "number" and ScriptData.MainSettings.ButtonBuy.BuyInterval > 0 then
-                task.wait(ScriptData.MainSettings.ButtonBuy.BuyInterval)
+                if type(ScriptData.MainSettings.ButtonBuy.BuyInterval) == "number"
+                    and ScriptData.MainSettings.ButtonBuy.BuyInterval > 0 then
+                    task.wait(ScriptData.MainSettings.ButtonBuy.BuyInterval)
+                end
+
+                break
             end
         end
 
         IsBusy = false
     end
 
-    while true do task.wait(0.05)
-        if not ScriptData.AutoBuy then continue end
+    while true do task.wait()
+        if not ScriptData.AutoBuy then
+            continue
+        end
 
         BuyButtons()
     end
@@ -1057,7 +1074,7 @@ MainSettingsTab:CreateInput({
 })
 
 MainSettingsTab:CreateInput({
-    Name = "X Factor (Current * XFactor = rebirth. 0 = off)",
+    Name = "X Factor (Current * XFactor = rebirth, 0 = off)",
     CurrentValue = "10",
     PlaceholderText = "e.g. 10x",
     RemoveTextAfterFocusLost = false,
